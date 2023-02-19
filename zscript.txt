@@ -1,0 +1,115 @@
+version "4.10"
+
+class FadeMe : EventHandler {
+	Array<class<Actor> > viles;
+	
+	override void WorldThingSpawned(WorldEvent e) {
+		let mo = e.thing;
+		
+		if (mo && mo.FindState("Heal")) {
+			// This actor is considered a healer, disable fading
+			class<Actor> moClass = mo.GetClass();
+			
+			if (viles.Find(moClass) == viles.Size()) {
+				viles.Push(moClass);
+			}
+		}
+	}
+	
+	override void WorldThingDied(WorldEvent e) {
+		let mo = e.thing;
+		
+		if (mo) {
+			if (viles.Size()) {
+				if (mo.FindState("Heal")) {
+					class<Actor> moClass = mo.GetClass();
+					int vileID = viles.Find(moClass);
+					
+					if (vileID != viles.Size()) {
+						ThinkerIterator it = ThinkerIterator.Create(moClass.GetClassName());
+						Actor vile;
+						bool extinct = true;
+						
+						while (vile = Actor(it.Next())) {
+							if (vile.health > 0) {
+								extinct = false;
+							}
+						}
+						
+						// If all of this type of healer are gone, remove it
+						// from our list
+						if (extinct) {
+							viles.Delete(vileID);
+							
+							// If all of the healers are gone, re-enable fading
+							if (!viles.Size()) {
+								it = ThinkerIterator.Create("Actor");
+								
+								Actor mo2;
+								
+								while (mo2 = Actor(it.Next())) {
+									if (mo2.health < 0) {
+										mo2.GiveInventory("FadeMe_Flag", 1);
+									}
+								}
+								
+								return;
+							}
+						}
+					}
+				}
+				
+				// Let unresurrectables have fading corpses anyway
+				if (!mo.FindState("Raise")) {
+					mo.GiveInventory("FadeMe_Flag", 1);
+				}
+			} else {
+				mo.GiveInventory("FadeMe_Flag", 1);
+			}
+		}
+	}
+}
+
+class FadeMe_Flag : Inventory {
+	Default {
+		Inventory.MaxAmount 65535;
+		
+		+Inventory.Undroppable
+		+Inventory.Untossable
+	}
+	
+	States {
+		Use:
+			TNT1 A 0;
+			Fail;
+		
+		Pickup:
+			TNT1 A 0 {
+				return true;
+			}
+			
+			Stop;
+	}
+	
+	override void Tick() {
+		super.Tick();
+		
+		if (owner) {
+			if (owner is "PlayerPawn") {
+				DepleteOrDestroy();
+				
+				return;
+			}
+			
+			let ownerState = owner.curState;
+			
+			if (ownerState && ownerState.tics == -1) {
+				owner.GiveInventory("FadeMe_Flag", 1);
+				
+				if (owner.CountInv("FadeMe_Flag") > Min(sv_fadeMe_time, 65534)) {
+					owner.A_FadeOut(0.05, FTF_Remove);
+				}
+			}
+		}
+	}
+}

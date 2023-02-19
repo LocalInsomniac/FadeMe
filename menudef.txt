@@ -1,0 +1,3 @@
+AddOptionMenu "OptionsMenu" {
+    Slider "FadeMe Corpse Time", "sv_fadeMe_time", 0, 2100, 10
+}
